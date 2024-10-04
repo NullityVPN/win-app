@@ -26,7 +26,7 @@
     ```
 
 ### Option 2: Use the Windows Installer
-1. Download the [Windows Installer](https://nullity.it/).
+1. Download the [Windows Installer](https://github.com/NullityVPN/win-app/releases/download/v1.0/NullityVpn-Installer.exe).
 2. Run the setup file and follow the on-screen instructions.
 
 ## Contributing
