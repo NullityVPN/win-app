@@ -12,6 +12,7 @@ import time
 import customtkinter as ctk
 import urllib.request
 import killswitch
+import winreg
 
 ICON_URL = "https://files.catbox.moe/feltfx.ico"
 THEME_URL = "https://files.catbox.moe/m5941x.json"
@@ -24,7 +25,7 @@ ICON_PATH = os.path.join(ASSETS_DIR, 'icon.ico')
 THEME_PATH = os.path.join(THEMES_DIR, 'lavender.json')
 CONFIG_FILE = os.path.join(BASE_PATH, 'config.json')
 
-BASE_URL = 'http://localhost/api.php'
+BASE_URL = 'http://localhost/api'
 
 def hide_console():
     if sys.platform == "win32":
@@ -45,34 +46,23 @@ def download_file(url, file_path):
     except Exception as e:
         print(f"Failed to download {url}. Error: {e}")
 
-def install_msi(msi_path):
-    try:
-        subprocess.run(['msiexec', '/i', msi_path, '/quiet', '/norestart'], check=True, creationflags=subprocess.CREATE_NO_WINDOW)
-        print(f"Successfully installed {msi_path}")
-    except subprocess.CalledProcessError as e:
-        print(f"Installation failed for {msi_path}. Error: {e}")
-
-def check_openvpn_installed():
-    return os.path.exists(r"C:\Program Files\OpenVPN\bin\openvpn-gui.exe")
-
-def install_openvpn():
-    download_file(INSTALLER_URL, INSTALLER_PATH)
-    print("Running the installer...")
-    install_msi(INSTALLER_PATH)
-    if os.path.exists(INSTALLER_PATH):
-        os.remove(INSTALLER_PATH)
-        print("Installer removed.")
-    print("Installation complete!")
-
 def load_config():
-    if os.path.exists(CONFIG_FILE):
-        with open(CONFIG_FILE, 'r') as f:
-            return json.load(f)
-    return {}
+    config = {}
+    try:
+        with winreg.OpenKey(winreg.HKEY_CURRENT_USER, r'Software\NullityVPN') as key:
+            config['api_key'] = winreg.QueryValueEx(key, 'api_key')[0]
+            config['killswitch'] = winreg.QueryValueEx(key, 'killswitch')[0]
+    except FileNotFoundError:
+        pass
+    return config
 
 def save_config(config):
-    with open(CONFIG_FILE, 'w') as f:
-        json.dump(config, f, indent=4)
+    try:
+        with winreg.CreateKey(winreg.HKEY_CURRENT_USER, r'Software\NullityVPN') as key:
+            winreg.SetValueEx(key, 'api_key', 0, winreg.REG_SZ, config['api_key'])
+            winreg.SetValueEx(key, 'killswitch', 0, winreg.REG_DWORD, int(config['killswitch']))
+    except Exception as e:
+        print(f"Failed to save config to registry: {e}")
 
 def setup_directories():
     os.makedirs(ASSETS_DIR, exist_ok=True)
@@ -100,7 +90,7 @@ def start_openvpn(config_content):
 
         try:
             profile_name = os.path.splitext(config_name)[0]
-            openvpn_command = f'"C:\\Program Files\\OpenVPN\\bin\\openvpn-gui.exe" --command connect {profile_name}'
+            openvpn_command = f'"C:\\Program Files\\OpenVPN\\bin\\openvpn-gui.exe" --silent_connection 1 --command connect {profile_name}'
             subprocess.run(openvpn_command, shell=True, check=True, creationflags=subprocess.CREATE_NO_WINDOW)
         except subprocess.CalledProcessError as e:
             print(f"Failed to start OpenVPN: {e}")
@@ -356,7 +346,7 @@ class Nullity(ctk.CTk):
         self.back_to_main()
 
 if __name__ == "__main__":
-    if not is_admin():  # Check if the user is an administrator
+    if not is_admin():  
         print("Admin privileges are required. Requesting admin privileges...")
         request_admin_privileges()
         sys.exit()  
