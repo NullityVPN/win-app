@@ -13,7 +13,6 @@ import customtkinter as ctk
 import urllib.request
 import killswitch
 import winreg
-import pystray
 from PIL import Image, ImageDraw
 
 ICON_URL = "https://files.catbox.moe/feltfx.ico"
@@ -240,30 +239,55 @@ class Nullity(ctk.CTk):
         self.destroy()
 
     def update_network_stats(self):
+        total_uploaded = 0
+        total_downloaded = 0
         previous_sent = psutil.net_io_counters().bytes_sent
         previous_recv = psutil.net_io_counters().bytes_recv
+
         while True:
-            time.sleep(1)
+            time.sleep(1)  # Wait for 1 second before checking again
+
+            # Fetch current sent and received bytes
             current_sent = psutil.net_io_counters().bytes_sent
             current_recv = psutil.net_io_counters().bytes_recv
-            upload_speed = (current_sent - previous_sent) / 1024 / 1024 * 8
-            download_speed = (current_recv - previous_recv) / 1024 / 1024 * 8
+
+            # Calculate how much data was uploaded/downloaded in the last second
+            uploaded = (current_sent - previous_sent) / 1024 / 1024  # Convert to MB
+            downloaded = (current_recv - previous_recv) / 1024 / 1024  # Convert to MB
+
+            # Add to the total uploaded/downloaded amounts
+            total_uploaded += uploaded
+            total_downloaded += downloaded
+
+            # Update previous sent/received values for next iteration
             previous_sent = current_sent
             previous_recv = current_recv
 
             try:
+                # Update the upload label with the total uploaded data and the arrow (↑)
                 if self.upload_speed_label:
-                    self.upload_speed_label.configure(text=f"Upload Speed: {upload_speed:.2f} Mbps")
+                    self.upload_speed_label.configure(
+                        text=f"↑ {total_uploaded:.2f} MB\n",
+                        font=("Arial", 16)  # Larger font for the data
+                    )
+                    self.upload_text_label.configure(
+                        text="Uploaded", font=("Arial", 12)  # Smaller font for the text
+                    )
+
+                # Update the download label with the total downloaded data and the arrow (↓)
                 if self.download_speed_label:
-                    self.download_speed_label.configure(text=f"Download Speed: {download_speed:.2f} Mbps")
-                if self.vpn_client and self.vpn_client.current_server:
-                    if self.connected_server_label:
-                        self.connected_server_label.configure(text=f"Connected Server: {self.vpn_client.current_server}")
-                else:
-                    if self.connected_server_label:
-                        self.connected_server_label.configure(text="Connected Server: --")
+                    self.download_speed_label.configure(
+                        text=f"↓ {total_downloaded:.2f} MB\n",
+                        font=("Arial", 16)  # Larger font for the data
+                    )
+                    self.download_text_label.configure(
+                        text="Downloaded", font=("Arial", 12)  # Smaller font for the text
+                    )
+
             except ctk.TclError:
+                # Exit the loop if the GUI is closed
                 break
+
 
     def setup_api_key(self):
         self.clear_frame()
@@ -291,19 +315,42 @@ class Nullity(ctk.CTk):
     def create_main_gui(self):
         self.content_frame = ctk.CTkFrame(self)
         self.content_frame.pack(side="top", fill="both", expand=True, padx=20, pady=20)
+
+        # Create the server connection labels and buttons
         self.connected_server_label = ctk.CTkLabel(self.content_frame, text="Connected Server: --", font=("Arial", 16))
         self.connected_server_label.pack(pady=10)
+
         self.connect_button = ctk.CTkButton(self.content_frame, text="Connect", command=self.show_servers)
         self.connect_button.pack(pady=10)
+
         self.stop_button = ctk.CTkButton(self.content_frame, text="Stop VPN", command=stop_openvpn)
         self.stop_button.pack(pady=10)
-        self.upload_speed_label = ctk.CTkLabel(self.content_frame, text="Upload Speed: -- Mbps")
-        self.upload_speed_label.pack(pady=10)
-        self.download_speed_label = ctk.CTkLabel(self.content_frame, text="Download Speed: -- Mbps")
-        self.download_speed_label.pack(pady=10)
+
+        # Frame for upload and download stats
+        self.stats_frame = ctk.CTkFrame(self.content_frame)
+        self.stats_frame.pack(pady=10)
+
+        # Create the upload and download labels
+        self.upload_speed_label = ctk.CTkLabel(self.stats_frame, text="↑ 0.00 MB", font=("Arial", 16))
+        self.upload_text_label = ctk.CTkLabel(self.stats_frame, text="Uploaded", font=("Arial", 12))
+
+        self.download_speed_label = ctk.CTkLabel(self.stats_frame, text="↓ 0.00 MB", font=("Arial", 16))
+        self.download_text_label = ctk.CTkLabel(self.stats_frame, text="Downloaded", font=("Arial", 12))
+
+        # Using grid to align the labels properly
+        self.upload_speed_label.grid(row=0, column=0, padx=10, pady=5, sticky="w")
+        self.upload_text_label.grid(row=1, column=0, padx=10, pady=2, sticky="w")
+
+        self.download_speed_label.grid(row=0, column=1, padx=10, pady=5, sticky="e")
+        self.download_text_label.grid(row=1, column=1, padx=10, pady=2, sticky="e")
+
+        # Start the network monitoring thread
         self.monitor_thread = threading.Thread(target=self.update_network_stats, daemon=True)
         self.monitor_thread.start()
+
         self.create_footer()
+
+
 
     def create_footer(self):
         footer_frame = ctk.CTkFrame(self)
